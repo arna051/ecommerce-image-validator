@@ -36,7 +36,7 @@
   },
   "scripts": {
     "build": "tsup",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build && npm run publint",
+    "check": "npm run format:check && npm run build && npm run lint && npm run typecheck && npm test && npm run publint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
