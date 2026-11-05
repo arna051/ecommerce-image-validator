@@ -136,6 +136,15 @@ npm ci
 npm run check
 ```
 
+To exercise a built package against local real-world images without adding those images to the repository:
+
+```bash
+npm run build
+npm run test:real-world -- /path/to/product-1.jpg /path/to/product-2.png
+```
+
+The smoke runner checks that buffer, stream, and guarded-path inputs produce identical stable evidence and decisions. See [docs/REAL_WORLD_VERIFICATION.md](docs/REAL_WORLD_VERIFICATION.md) for the latest recorded corpus run.
+
 ## License
 
 MIT. Model and dataset licences are independent of this package's licence.

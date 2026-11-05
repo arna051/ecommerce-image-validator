@@ -11,6 +11,7 @@
   "files": [
     "dist",
     "docs",
+    "scripts",
     "README.md",
     "CHANGELOG.md",
     "LICENSE",
@@ -41,6 +42,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage",
+    "test:real-world": "node scripts/real-world-smoke.mjs",
     "publint": "publint",
     "prepack": "npm run check"
   },

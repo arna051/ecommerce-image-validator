@@ -101,6 +101,34 @@ describe("validator", () => {
     ).toBe(1);
   });
 
+  it("accepts valid TIFF and AVIF containers and reports normalized formats", async () => {
+    const source = sharp({
+      create: { width: 16, height: 12, channels: 3, background: "#808080" },
+    });
+    const [tiff, avif] = await Promise.all([
+      source.clone().tiff().toBuffer(),
+      source.clone().avif().toBuffer(),
+    ]);
+    const permissive = defineImagePolicy({
+      id: "formats",
+      version: 1,
+      rules: [],
+    });
+    const validator = createImageValidator();
+    const tiffResult = await validator.validate({
+      image: { kind: "buffer", data: tiff },
+      policy: permissive,
+    });
+    const avifResult = await validator.validate({
+      image: { kind: "buffer", data: avif },
+      policy: permissive,
+    });
+    expect(tiffResult.input.detectedMediaType).toBe("image/tiff");
+    expect(tiffResult.measurements["image.format"]?.value).toBe("tiff");
+    expect(avifResult.input.detectedMediaType).toBe("image/avif");
+    expect(avifResult.measurements["image.format"]?.value).toBe("avif");
+  });
+
   it("reads streams and rejects or reviews violated rules", async () => {
     const result = await createImageValidator().validate({
       image: {
@@ -135,6 +163,40 @@ describe("validator", () => {
         policy,
       }),
     ).rejects.toBeInstanceOf(ImageValidatorError);
+
+    const frame = Buffer.alloc(2 * 2 * 3);
+    const secondFrame = Buffer.alloc(2 * 2 * 3, 255);
+    const animatedGif = await sharp(Buffer.concat([frame, secondFrame]), {
+      raw: { width: 2, height: 4, channels: 3, pageHeight: 2 },
+    })
+      .gif({ loop: 0, delay: [100, 100] })
+      .toBuffer();
+    await expect(
+      createImageValidator().validate({
+        image: { kind: "buffer", data: animatedGif },
+        policy,
+      }),
+    ).rejects.toMatchObject({ code: "UNSUPPORTED_IMAGE" });
+
+    const plainPng = await sharp(frame, {
+      raw: { width: 2, height: 2, channels: 3 },
+    })
+      .png()
+      .toBuffer();
+    const animationControl = Buffer.from([
+      0, 0, 0, 8, 97, 99, 84, 76, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0,
+    ]);
+    const pngWithAnimationControl = Buffer.concat([
+      plainPng.subarray(0, 33),
+      animationControl,
+      plainPng.subarray(33),
+    ]);
+    await expect(
+      createImageValidator().validate({
+        image: { kind: "buffer", data: pngWithAnimationControl },
+        policy,
+      }),
+    ).rejects.toMatchObject({ code: "UNSUPPORTED_IMAGE" });
   });
 
   it("fails safely for a deterministic malformed-input corpus", async () => {

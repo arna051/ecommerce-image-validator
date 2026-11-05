@@ -72,6 +72,59 @@ const measurement = (
     ? { value, unit, source: metadataSource }
     : { value, source: metadataSource };
 
+function detectContainerFrames(source: Buffer, metadata: Metadata): number {
+  if (
+    metadata.format === "png" &&
+    source.length >= 8 &&
+    source.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))
+  ) {
+    let offset = 8;
+    while (offset + 12 <= source.length) {
+      const length = source.readUInt32BE(offset);
+      const next = offset + 12 + length;
+      if (next > source.length) break;
+      if (
+        source.toString("ascii", offset + 4, offset + 8) === "acTL" &&
+        length >= 8
+      ) {
+        return source.readUInt32BE(offset + 8);
+      }
+      offset = next;
+    }
+  }
+  if (
+    metadata.format === "webp" &&
+    source.length >= 12 &&
+    source.toString("ascii", 0, 4) === "RIFF" &&
+    source.toString("ascii", 8, 12) === "WEBP"
+  ) {
+    let offset = 12;
+    let frames = 0;
+    while (offset + 8 <= source.length) {
+      const length = source.readUInt32LE(offset + 4);
+      const next = offset + 8 + length + (length & 1);
+      if (next > source.length) break;
+      if (source.toString("ascii", offset, offset + 4) === "ANMF") frames += 1;
+      offset = next;
+    }
+    if (frames > 0) return frames;
+  }
+  return metadata.pages ?? 1;
+}
+
+function detectedType(metadata: Metadata): {
+  format: string;
+  mediaType: string;
+} {
+  const mediaType = metadata.mediaType ?? `image/${metadata.format}`;
+  const subtype = mediaType.startsWith("image/")
+    ? mediaType.slice("image/".length)
+    : metadata.format;
+  const format =
+    subtype === "heic" || subtype === "avif" ? subtype : metadata.format;
+  return { format, mediaType };
+}
+
 function validateLimits(limits: ValidatorLimits): void {
   for (const [key, value] of Object.entries(limits)) {
     if (!Number.isInteger(value) || value < 1) {
@@ -240,10 +293,9 @@ export function createImageValidator(
             failOn: "warning",
             limitInputPixels: limits.maxPixels,
             sequentialRead: true,
-            pages: limits.maxFrames + 1,
           });
           metadata = await image.metadata();
-          const frames = metadata.pages ?? 1;
+          const frames = detectContainerFrames(source, metadata);
           if (frames > limits.maxFrames) {
             throw new ImageValidatorError(
               "UNSUPPORTED_IMAGE",
@@ -288,6 +340,8 @@ export function createImageValidator(
         const decodedAt = performance.now();
         const orientedWidth = metadata.autoOrient.width;
         const orientedHeight = metadata.autoOrient.height;
+        const detected = detectedType(metadata);
+        const frames = detectContainerFrames(source, metadata);
         const measurements: Record<string, Measurement> = {
           "image.bytes": measurement(source.byteLength, "bytes"),
           "image.width": measurement(orientedWidth, "pixels"),
@@ -296,8 +350,8 @@ export function createImageValidator(
             Number((orientedWidth / orientedHeight).toFixed(8)),
             "ratio",
           ),
-          "image.format": measurement(metadata.format),
-          "image.frames": measurement(metadata.pages ?? 1),
+          "image.format": measurement(detected.format),
+          "image.frames": measurement(frames),
           "image.hasAlpha": measurement(metadata.hasAlpha),
           "image.orientation": measurement(metadata.orientation ?? 1),
           "image.colourSpace": measurement(metadata.space),
@@ -424,7 +478,7 @@ export function createImageValidator(
             digest: digestImagePolicy(policy),
           },
           input: {
-            detectedMediaType: `image/${metadata.format}`,
+            detectedMediaType: detected.mediaType,
             bytes: source.byteLength,
             width: orientedWidth,
             height: orientedHeight,

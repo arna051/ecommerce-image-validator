@@ -15,12 +15,15 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
+    "allowJs": true,
+    "checkJs": true,
     "skipLibCheck": true,
     "types": ["node", "vitest/globals"]
   },
   "include": [
     "src",
     "test",
+    "scripts",
     "eslint.config.js",
     "tsup.config.ts",
     "vitest.config.ts"
